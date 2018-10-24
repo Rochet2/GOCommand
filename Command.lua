@@ -48,13 +48,7 @@ function parser.gobnear(tbl)
     return t
 end
 
-function parser.gobinfoguid(tbl)
-    assert(#tbl == 14)
-    local t = {}
-    return t
-end
-
-function parser.gobinfoentry(tbl)
+function parser.gobinfo(tbl)
     assert(#tbl == 9 or #tbl == 14)
     local t = {}
     if #tbl == 9 then
@@ -111,7 +105,7 @@ function command.lookupobj(lowguid, ...)
     libtrinity:DoCommand(string.format("gobject info guid %d", lowguid), makecallback(parser.lookupobj, ...))
 end
 function command.gobinfoguid(lowguid, ...)
-    libtrinity:DoCommand(string.format("gobject info guid %d", lowguid), makecallback(parser.gobinfoguid, ...))
+    libtrinity:DoCommand(string.format("gobject info guid %d", lowguid), makecallback(parser.gobinfo, ...))
 end
 function command.gobinfoentry(entry, ...)
     libtrinity:DoCommand(string.format("gobject info %d", entry), makecallback(parser.gobinfoentry, ...))
