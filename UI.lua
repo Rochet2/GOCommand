@@ -160,45 +160,6 @@ function AllowTooltip(elem, tip)
     SetScript(elem, "OnLeave", hidetooltip)
 end
 
-function Export()
-    local function callback(gps)
-        -- local e = CreateFrame("EditBox")
-        -- e:SetSize(600, 600)
-        -- e:SetPoint("CENTER")
-        -- MakeTexture(e):SetAllPoints(e)
-        -- e:SetFont("Fonts/ARIALN.ttf", 11)
-        -- e:SetMultiLine(true)
-        
-        local selected = StoredList:getselected()
-        local s = ""
-        for k,v in ipairs(selected) do
-            if v.map == gps.map then
-                s = s..string.format("{entry=%d, x=%f, y=%f, z=%f, o=%f},", v.entry, v.x, v.y, v.z, v.o)
-            end
-        end
-        local exported = string.format("return {player=%s, data={%s}}", string.format("{x=%f, y=%f, z=%f, o=%f}", gps.x, gps.y, gps.z, gps.o), s)
-        -- e:SetText(exported)
-        EXPORT = exported
-    end
-    command.gpsplayer(callback)
-end
-
-function Import()
-    local function callback(gps)
-        local t = loadstring(EXPORT)()
-        local p = t.player
-        local d = t.data
-        for k,v in ipairs(d) do
-            command.gobadd(v.entry, function(data)
-                local x,y,z = v.x-p.x+gps.x, v.y-p.y+gps.y, v.z-p.z+gps.z
-                command.gobmovepos(data.guid, x, y, z)
-                command.gobturn(data.guid, v.o, 0, 0)
-            end)
-        end
-    end
-    command.gpsplayer(callback)
-end
-
 local function MakeSelectList(data)
     local f = CreateFrame("Frame", "selectlist")
     f:SetToplevel(true)
@@ -427,7 +388,7 @@ local function MakeRotator()
     b:SetMaxLetters(5)
     c = MakeInput(nil, f)
     c:SetText(0)
-    AllowTooltip(c, "yaw")
+    AllowTooltip(c, "roll")
     c:SetHeight(height)
     c:SetPoint("TOPLEFT", b, "BOTTOMLEFT")
     c:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT")
@@ -624,11 +585,11 @@ local function MakeMover()
     MakeTexture(move):SetAllPoints(move)
     SetScript(move, "OnClick", function(self)
         local objs = StoredList:getselected()
-        for k,v in ipairs(objs) do
-            command.gpsplayer(function(gpsplayer)
+        command.gpsplayer(function(gpsplayer)
+            for k,v in ipairs(objs) do
                 command.gobmovepos(v.guid, gpsplayer.x, gpsplayer.y, gpsplayer.z)
-            end)
-        end
+            end
+        end)
     end)
     
     local t = MakeFontString(l)
@@ -722,6 +683,66 @@ local function MakeMover()
             z:SetText((info.maxz-info.minz)*info.size)
         end)
     end)
+
+    local rotatearoundplayer = MakeInput(nil, f)
+    AllowTooltip(rotatearoundplayer, "rotate objects around player")
+    rotatearoundplayer:SetText(1)
+    rotatearoundplayer:SetHeight(height)
+    rotatearoundplayer:SetPoint("TOPLEFT", copydimensions, "BOTTOMLEFT")
+    rotatearoundplayer:SetPoint("TOPRIGHT", copydimensions, "BOTTOMRIGHT")
+    SetScript(rotatearoundplayer, "OnMouseWheel", function(self, delta)
+        local odiff = delta*self:GetNumber() -- deg
+        local selected = StoredList:getselected()
+        command.gpsplayer(function(gpsplayer)
+            for k,v in ipairs(selected) do
+                command.gpsgob(v.guid, function(gps)
+                    local x, y, o = gps.x-gpsplayer.x, gps.y-gpsplayer.y, odiff
+                    local x1 = x*cos(o)-y*sin(o)
+                    local y1 = x*sin(o)+y*cos(o)
+                    command.gobmovepos(v.guid, gpsplayer.x+x1, gpsplayer.y+y1, gps.z)
+                    command.gobturn(v.guid, gps.o+rad(odiff), 0, 0)
+                end)
+            end
+        end)
+    end)
+    rotatearoundplayer:EnableMouseWheel(true)
+
+    local rotatearoundgob = MakeInput(nil, f)
+    AllowTooltip(rotatearoundgob, "rotate objects around their center point")
+    rotatearoundgob:SetText(1)
+    rotatearoundgob:SetHeight(height)
+    rotatearoundgob:SetPoint("TOPLEFT", rotatearoundplayer, "BOTTOMLEFT")
+    rotatearoundgob:SetPoint("TOPRIGHT", rotatearoundplayer, "BOTTOMRIGHT")
+    SetScript(rotatearoundgob, "OnMouseWheel", function(self, delta)
+        local odiff = delta*self:GetNumber() -- deg
+        local selected = StoredList:getselected()
+        local data = {}
+        local objectcount = #selected
+        for k,v in ipairs(selected) do
+            command.gpsgob(v.guid, function(gps)
+                gps.guid = v.guid
+                tinsert(data, gps)
+                if #data == objectcount then
+                    local centerx, centery = 0,0
+                    for k,v in ipairs(data) do
+                        centerx = centerx+v.x
+                        centery = centery+v.y
+                    end
+                    centerx = centerx/objectcount
+                    centery = centery/objectcount
+                    
+                    for k,gps in ipairs(data) do
+                        local x, y, o = gps.x-centerx, gps.y-centery, odiff
+                        local x1 = x*cos(o)-y*sin(o)
+                        local y1 = x*sin(o)+y*cos(o)
+                        command.gobmovepos(gps.guid, centerx+x1, centery+y1, gps.z)
+                        command.gobturn(gps.guid, gps.o+rad(odiff), 0, 0)
+                    end
+                end
+            end)
+        end
+    end)
+    rotatearoundgob:EnableMouseWheel(true)
     
     f:Show()
 end
@@ -874,6 +895,145 @@ local function MakeMassAction()
     f:Show()
 end
 MakeMassAction()
+
+function Export()
+    local function callback(gps)
+        -- local e = CreateFrame("EditBox")
+        -- e:SetSize(600, 600)
+        -- e:SetPoint("CENTER")
+        -- MakeTexture(e):SetAllPoints(e)
+        -- e:SetFont("Fonts/ARIALN.ttf", 11)
+        -- e:SetMultiLine(true)
+        
+        local selected = StoredList:getselected()
+        local s = ""
+        for k,v in ipairs(selected) do
+            if v.map == gps.map then
+                s = s..string.format("{entry=%d, x=%f, y=%f, z=%f, o=%f},", v.entry, v.x, v.y, v.z, v.o)
+            end
+        end
+        local exported = string.format("return {player=%s, data={%s}}", string.format("{x=%f, y=%f, z=%f, o=%f}", gps.x, gps.y, gps.z, gps.o), s)
+        -- e:SetText(exported)
+        EXPORT = exported
+    end
+    command.gpsplayer(callback)
+end
+
+function Import()
+    local function callback(gps)
+        local t = loadstring(EXPORT)()
+        local p = t.player
+        local d = t.data
+        for k,v in ipairs(d) do
+            command.gobadd(v.entry, function(data)
+                local x,y,z = v.x-p.x+gps.x, v.y-p.y+gps.y, v.z-p.z+gps.z
+                command.gobmovepos(data.guid, x, y, z)
+                command.gobturn(data.guid, v.o, 0, 0)
+            end)
+        end
+    end
+    command.gpsplayer(callback)
+end
+
+function MakeClipboard()
+    local height = 10
+    local f = MakeFrame("clipboard")
+    f:SetToplevel(true)
+    f:SetSize(30, height*5)
+    f:RegisterForDrag("LeftButton")
+    f:SetPoint("CENTER")
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    MakeTexture(f):SetAllPoints(f)
+    SetScript(f, "OnDragStart", f.StartMoving)
+    SetScript(f, "OnHide", f.StopMovingOrSizing)
+    SetScript(f, "OnDragStop", f.StopMovingOrSizing)
+    f:RegisterForDrag("LeftButton")
+    
+    local l = MakeFontString(f)
+    l:SetPoint("TOPLEFT")
+    l:SetPoint("TOPRIGHT")
+    l:SetHeight(height)
+    l:SetTextColor(0,0,0)
+    l:SetText("Clipboard")
+    
+    local clip = {playerorientation = 0, data = {}}
+    local copy = MakeButton(nil, f)
+    copy:SetText("Copy")
+    copy:SetHeight(height)
+    copy:SetPoint("TOPLEFT", l, "BOTTOMLEFT")
+    copy:SetPoint("TOPRIGHT", l, "BOTTOMRIGHT")
+    SetScript(copy, "OnClick", function(self)
+        local selected = StoredList:getselected()
+        command.gpsplayer(function(gpsplayer)
+            clip.playerorientation = GetPlayerFacing()
+            clip.data = {}
+            for k,v in ipairs(selected) do
+                command.gpsgob(v.guid, function(gps)
+                    if gpsplayer.map == gps.map then
+                        tinsert(clip.data, {entry = v.entry, x=gps.x-gpsplayer.x, y=gps.y-gpsplayer.y, z=gps.z-gpsplayer.z, o=gps.o})
+                    end
+                end)
+            end
+        end)
+    end)
+    local cut = MakeButton(nil, f)
+    cut:SetText("Cut")
+    cut:SetHeight(height)
+    cut:SetPoint("TOPLEFT", copy, "BOTTOMLEFT")
+    cut:SetPoint("TOPRIGHT", copy, "BOTTOMRIGHT")
+    SetScript(cut, "OnClick", function(self)
+        local selected = StoredList:getselected()
+        command.gpsplayer(function(gpsplayer)
+            clip.playerorientation = GetPlayerFacing()
+            clip.data = {}
+            for k,v in ipairs(selected) do
+                command.gpsgob(v.guid, function(gps)
+                    if gpsplayer.map == gps.map then
+                        tinsert(clip.data, {entry = v.entry, x=gps.x-gpsplayer.x, y=gps.y-gpsplayer.y, z=gps.z-gpsplayer.z, o=gps.o})
+                        command.gobdelete(v.guid, function() StoredList:del(v.guid) end)
+                    end
+                end)
+            end
+        end)
+    end)
+    
+    local paste = MakeButton(nil, f)
+    paste:SetText("Paste")
+    paste:SetHeight(height)
+    paste:SetPoint("TOPLEFT", cut, "BOTTOMLEFT")
+    paste:SetPoint("TOPRIGHT", cut, "BOTTOMRIGHT")
+    SetScript(paste, "OnClick", function(self)
+        for k,v in ipairs(clip.data) do
+            command.gobadd(v.entry, function(info)
+                StoredList:add(info)
+                command.gobturn(info.guid, v.o, 0, 0)
+                command.gobmovepos(info.guid, info.x+v.x, info.y+v.y, info.z+v.z)
+            end)
+        end
+    end)
+    
+    local pasterelative = MakeButton(nil, f)
+    pasterelative:SetText("Paste relative")
+    pasterelative:SetHeight(height)
+    pasterelative:SetPoint("TOPLEFT", paste, "BOTTOMLEFT")
+    pasterelative:SetPoint("TOPRIGHT", paste, "BOTTOMRIGHT")
+    SetScript(pasterelative, "OnClick", function(self)
+        local odiff = GetPlayerFacing() - clip.playerorientation
+        for k,v in ipairs(clip.data) do
+            command.gobadd(v.entry, function(info)
+                StoredList:add(info)
+                local x, y, o = v.x, v.y, deg(odiff)
+                local x1 = x*cos(o)-y*sin(o)
+                local y1 = x*sin(o)+y*cos(o)
+                command.gobmovepos(info.guid, info.x+x1, info.y+y1, info.z+v.z)
+                command.gobturn(info.guid, v.o+odiff, 0, 0)
+            end)
+        end
+    end)
+end
+MakeClipboard()
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("CHAT_MSG_SYSTEM")
