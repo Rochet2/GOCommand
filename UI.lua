@@ -32,24 +32,20 @@ end
 
 local StoredList = {}
 function StoredList.add(self, value)
-    util.asserttype("number", value.guid, value.entry, value.x, value.y, value.z, value.o)
+    util.asserttype("number", value.guid, value.entry)
     util.asserttype("string", value.name)
-    add(self, value)
-    value.selected = true
+    add(self, {guid = value.guid, entry = value.entry, name = value.name, selected = true})
     if self.update then self:update() end
 end
 function StoredList.del(self, guid)
     util.asserttype("number", guid)
     for k,v in ipairs(self) do
-        print(v.guid, guid, v.guid == guid)
         if v.guid == guid then
             tremove(self, k)
-            print("removed")
             break
         end
     end
     if self.update then self:update() end
-    print("updated")
 end
 function StoredList.getselected(self)
     local t = {}
@@ -69,6 +65,13 @@ end
 function StoredList.selectinverse(self)
     for k,v in ipairs(self) do
         v.selected = not v.selected
+    end
+    if self.update then self:update() end
+end
+function StoredList.clear(self)
+    local n = #self
+    for i = 1, n do
+        self[i] = nil
     end
     if self.update then self:update() end
 end
@@ -233,13 +236,20 @@ local function MakeSelectList(data)
     MakeTexture(selectinv):SetAllPoints(selectinv)
     SetScript(selectinv, "OnClick", function(self) data:selectinverse() end)
 
+    local clear = MakeButton(nil, f)
+    clear:SetPoint("TOPRIGHT", selectinv, "TOPLEFT")
+    clear:SetSize(10, 10)
+    clear:SetText("C")
+    MakeTexture(clear):SetAllPoints(clear)
+    SetScript(clear, "OnClick", function(self) data:clear() end)
+
     local i = MakeFontString(f)
     i:SetHeight(10)
     i:SetTextColor(0,0,0)
     i:SetText("Selection list")
     i:SetHeight(10)
     i:SetPoint("TOPLEFT", f, "TOPLEFT")
-    i:SetPoint("TOPRIGHT", selectinv, "TOPLEFT")
+    i:SetPoint("TOPRIGHT", clear, "TOPLEFT")
 
     local r = MakeButton(nil, f)
     r:SetPoint("BOTTOMRIGHT")
@@ -435,7 +445,7 @@ local function MakeSelector()
     local height = 10
     local f = CreateFrame("Frame", "selector")
     f:SetToplevel(true)
-    f:SetSize(width, height*6)
+    f:SetSize(width, height*7)
     f:RegisterForDrag("LeftButton")
     f:SetPoint("CENTER")
     f:EnableMouse(true)
@@ -590,12 +600,43 @@ local function MakeMover()
     SetScript(f, "OnDragStop", f.StopMovingOrSizing)
     f:RegisterForDrag("LeftButton")
     
-    local l = MakeFontString(f)
+    local l = MakeLayer(f)
     l:SetPoint("TOPLEFT")
     l:SetPoint("TOPRIGHT")
     l:SetHeight(height)
-    l:SetTextColor(0,0,0)
-    l:SetText("Move")
+
+    local orients_text = {"P", "O", "C"}
+    local changeorient = MakeButton(nil, l)
+    changeorient:SetPoint("TOPRIGHT")
+    changeorient:SetSize(10, 10)
+    changeorient.orient = 0
+    changeorient:SetText(orients_text[(changeorient.orient%#orients_text)+1])
+    MakeTexture(changeorient):SetAllPoints(changeorient)
+    SetScript(changeorient, "OnClick", function(self)
+        self.orient = self.orient+1
+        self:SetText(orients_text[(self.orient%#orients_text)+1])
+    end)
+
+    local move = MakeButton(nil, l)
+    move:SetPoint("TOPRIGHT", changeorient, "TOPLEFT")
+    move:SetSize(10, 10)
+    move:SetText("M")
+    MakeTexture(move):SetAllPoints(move)
+    SetScript(move, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsplayer(function(gpsplayer)
+                command.gobmovepos(v.guid, gpsplayer.x, gpsplayer.y, gpsplayer.z)
+            end)
+        end
+    end)
+    
+    local t = MakeFontString(l)
+    t:SetPoint("TOPLEFT")
+    t:SetPoint("TOPRIGHT", move, "TOPLEFT")
+    t:SetHeight(height)
+    t:SetTextColor(0,0,0)
+    t:SetText("Move")
     
     local moveque = {}
     local function movenext(guid)
@@ -610,8 +651,13 @@ local function MakeMover()
         local v = moveque[guid][1]
         if v then
             command.gpsgob(guid, function(gps)
-                gps[v.key] = gps[v.key] + v.value
-                command.gobmovepos(guid, gps.x, gps.y, gps.z, movecomplete, movecomplete)
+                local offset = {x=0,y=0,z=0}
+                offset[v.key] = v.value
+                local orients = {GetPlayerFacing(), gps.o, 0}
+                local x, y, o = offset.x, offset.y, deg(orients[((v.orient or 1)%(#orients))+1])
+                offset.x = x*cos(o)-y*sin(o)
+                offset.y = x*sin(o)+y*cos(o)
+                command.gobmovepos(guid, gps.x+offset.x, gps.y+offset.y, gps.z+offset.z, movecomplete, movecomplete)
             end, movecomplete)
         end
     end
@@ -624,10 +670,10 @@ local function MakeMover()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             if not moveque[v.guid] then
-                moveque[v.guid] = {{value = value, key = self.key}}
+                moveque[v.guid] = {{value = value, key = self.key, orient = changeorient.orient}}
                 movenext(v.guid)
             else
-                tinsert(moveque[v.guid], {value = value, key = self.key})
+                tinsert(moveque[v.guid], {value = value, key = self.key, orient = changeorient.orient})
             end
         end
     end
@@ -680,6 +726,154 @@ local function MakeMover()
     f:Show()
 end
 MakeMover()
+
+local function MakeMassAction()
+    local width = 32
+    local height = 10
+    local f = CreateFrame("Frame", "massaction")
+    f:SetToplevel(true)
+    f:SetSize(width, height*9)
+    f:RegisterForDrag("LeftButton")
+    f:SetPoint("CENTER")
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    MakeTexture(f):SetAllPoints(f)
+    SetScript(f, "OnDragStart", f.StartMoving)
+    SetScript(f, "OnHide", f.StopMovingOrSizing)
+    SetScript(f, "OnDragStop", f.StopMovingOrSizing)
+    f:RegisterForDrag("LeftButton")
+    
+    local l = MakeFontString(f)
+    l:SetPoint("TOPLEFT")
+    l:SetPoint("TOPRIGHT")
+    l:SetHeight(height)
+    l:SetTextColor(0,0,0)
+    l:SetText("Actions")
+    
+    local delete = MakeButton(nil, f)
+    delete:SetText("Delete")
+    delete:SetHeight(height)
+    delete:SetPoint("TOPLEFT", l, "BOTTOMLEFT")
+    delete:SetPoint("TOPRIGHT", l, "BOTTOMRIGHT")
+    SetScript(delete, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            StoredList:del(v.guid)
+            command.gobdelete(v.guid)
+        end
+    end)
+    
+    local ground = MakeButton(nil, f)
+    ground:SetText("Ground")
+    ground:SetHeight(height)
+    ground:SetPoint("TOPLEFT", delete, "BOTTOMLEFT")
+    ground:SetPoint("TOPRIGHT", delete, "BOTTOMRIGHT")
+    SetScript(ground, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsgob(v.guid, function(gps)
+                command.gobmovepos(v.guid, gps.x, gps.y, gps.groundz)
+            end)
+        end
+    end)
+    
+    local floor = MakeButton(nil, f)
+    floor:SetText("Floor")
+    floor:SetHeight(height)
+    floor:SetPoint("TOPLEFT", ground, "BOTTOMLEFT")
+    floor:SetPoint("TOPRIGHT", ground, "BOTTOMRIGHT")
+    SetScript(floor, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsgob(v.guid, function(gps)
+                command.gobmovepos(v.guid, gps.x, gps.y, gps.floorz)
+            end)
+        end
+    end)
+    
+    local X = MakeButton(nil, f)
+    X:SetText("X")
+    X:SetHeight(height)
+    X:SetPoint("TOPLEFT", floor, "BOTTOMLEFT")
+    X:SetPoint("TOPRIGHT", floor, "BOTTOMRIGHT")
+    SetScript(X, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsplayer(function(gpsplayer)
+                command.gpsgob(v.guid, function(gps)
+                    command.gobmovepos(v.guid, gpsplayer.x, gps.y, gps.z)
+                end)
+            end)
+        end
+    end)
+    
+    local Y = MakeButton(nil, f)
+    Y:SetText("Y")
+    Y:SetHeight(height)
+    Y:SetPoint("TOPLEFT", X, "BOTTOMLEFT")
+    Y:SetPoint("TOPRIGHT", X, "BOTTOMRIGHT")
+    SetScript(Y, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsplayer(function(gpsplayer)
+                command.gpsgob(v.guid, function(gps)
+                    command.gobmovepos(v.guid, gps.x, gpsplayer.y, gps.z)
+                end)
+            end)
+        end
+    end)
+    
+    local Z = MakeButton(nil, f)
+    Z:SetText("Z")
+    Z:SetHeight(height)
+    Z:SetPoint("TOPLEFT", Y, "BOTTOMLEFT")
+    Z:SetPoint("TOPRIGHT", Y, "BOTTOMRIGHT")
+    SetScript(Z, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gpsplayer(function(gpsplayer)
+                command.gpsgob(v.guid, function(gps)
+                    command.gobmovepos(v.guid, gps.x, gps.y, gpsplayer.z)
+                end)
+            end)
+        end
+    end)
+    
+    local O = MakeButton(nil, f)
+    O:SetText("Rotation")
+    O:SetHeight(height)
+    O:SetPoint("TOPLEFT", Z, "BOTTOMLEFT")
+    O:SetPoint("TOPRIGHT", Z, "BOTTOMRIGHT")
+    SetScript(O, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            command.gobturn(v.guid, GetPlayerFacing(), 0, 0)
+        end
+    end)
+    
+    local copy = MakeButton(nil, f)
+    copy:SetText("Copy")
+    copy:SetHeight(height)
+    copy:SetPoint("TOPLEFT", O, "BOTTOMLEFT")
+    copy:SetPoint("TOPRIGHT", O, "BOTTOMRIGHT")
+    SetScript(copy, "OnClick", function(self)
+        local objs = StoredList:getselected()
+        for k,v in ipairs(objs) do
+            v.selected = false
+            command.gpsgob(v.guid, function(gps)
+                command.gobadd(v.entry, function(info)
+                    StoredList:add(info)
+                    command.gobmovepos(info.guid, gps.x, gps.y, gps.z)
+                    command.gobturn(info.guid, gps.o, 0, 0)
+                end)
+            end)
+        end
+    end)
+    
+    f:Show()
+end
+MakeMassAction()
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("CHAT_MSG_SYSTEM")

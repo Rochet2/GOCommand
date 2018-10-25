@@ -108,7 +108,7 @@ function command.gobinfoguid(lowguid, ...)
     libtrinity:DoCommand(string.format("gobject info guid %d", lowguid), makecallback(parser.gobinfo, ...))
 end
 function command.gobinfoentry(entry, ...)
-    libtrinity:DoCommand(string.format("gobject info %d", entry), makecallback(parser.gobinfoentry, ...))
+    libtrinity:DoCommand(string.format("gobject info %d", entry), makecallback(parser.gobinfo, ...))
 end
 function command.listobj(entry, ...)
     libtrinity:DoCommand(string.format("list object %d %d", entry, 0x7FFFFFFF), makecallback(parser.gobnear, ...))
