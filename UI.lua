@@ -600,28 +600,58 @@ local function MakeMover()
     t:SetText("Move")
     
     local moveque = {}
-    local function movenext(guid)
-        local function movecomplete()
-            if #moveque[guid] <= 1 then
-                moveque[guid] = nil
-            else
-                tremove(moveque[guid], 1)
-                movenext(guid)
+    local function domove(guid, ox, oy, oz, oo, delta)
+        local noque = not moveque[guid]
+        moveque[guid] = moveque[guid] or {}
+        tinsert(moveque[guid], {guid=guid, x=ox, y=oy, z=oz, o=oo, d=delta})
+        if noque then
+            local function shebang()
+                command.gpsgob(guid, function(gps)
+                    local tx, ty, tz, to = gps.x, gps.y, gps.z, gps.o
+                    for k,offset in ipairs(moveque[guid]) do
+                        if offset.x or offset.y or offset.d then
+                            local x, y, o = offset.x, offset.y, deg(offset.d or gps.o)
+                            local mx = x*cos(o)-y*sin(o)
+                            local my = x*sin(o)+y*cos(o)
+                            gps.x = gps.x+mx
+                            gps.y = gps.y+my
+                        end
+                        if offset.o then
+                            gps.o = gps.o+offset.o
+                        end
+                        if offset.z then
+                            gps.z = gps.z+offset.z
+                        end
+                    end
+                    local done = 0
+                    local function callfinished()
+                        done = done-1
+                        if done == 0 then
+                            if #moveque[guid] == 0 then
+                                moveque[guid] = nil
+                            else
+                                shebang()
+                            end
+                        end
+                    end
+                    local madecall = false
+                    if gps.x ~= tx or gps.y ~= ty or gps.z ~= tz then
+                        done = done+1
+                        command.gobmovepos(guid, gps.x, gps.y, gps.z, callfinished, callfinished)
+                        madecall = true
+                    end
+                    if gps.o ~= to then
+                        done = done+1
+                        command.gobturn(guid, gps.o, 0, 0, callfinished, callfinished)
+                        madecall = true
+                    end
+                    moveque[guid] = madecall and {} or nil
+                end, function() moveque[guid] = nil end)
             end
-        end
-        local v = moveque[guid][1]
-        if v then
-            command.gpsgob(guid, function(gps)
-                local offset = {x=0,y=0,z=0}
-                offset[v.key] = v.value
-                local orients = {GetPlayerFacing(), gps.o, 0}
-                local x, y, o = offset.x, offset.y, deg(orients[((v.orient or 1)%(#orients))+1])
-                offset.x = x*cos(o)-y*sin(o)
-                offset.y = x*sin(o)+y*cos(o)
-                command.gobmovepos(guid, gps.x+offset.x, gps.y+offset.y, gps.z+offset.z, movecomplete, movecomplete)
-            end, movecomplete)
+            shebang()
         end
     end
+    
     local function mouse(self, delta)
         local value = delta*self:GetNumber()
         if IsShiftKeyDown() then value = value/10 end
@@ -630,12 +660,13 @@ local function MakeMover()
         if value == 0 then return end
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
-            if not moveque[v.guid] then
-                moveque[v.guid] = {{value = value, key = self.key, orient = changeorient.orient}}
-                movenext(v.guid)
-            else
-                tinsert(moveque[v.guid], {value = value, key = self.key, orient = changeorient.orient})
-            end
+            local offset = {x=0, y=0, z=0}
+            offset[self.key] = offset[self.key]+value
+            local orients = {}
+            orients[1] = GetPlayerFacing()
+            orients[2] = nil
+            orients[3] = 0
+            domove(v.guid, offset.x, offset.y, offset.z, nil, orients[((changeorient.orient or 1)%3)+1])
         end
     end
 
