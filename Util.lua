@@ -69,6 +69,23 @@ function util.parseunitguid(guid)
     return {typeid = typeid, lowguid = lowguid, entry = entry}
 end
 
+function util.copy(t, ...)
+    local n = select("#", ...)
+    local c = {}
+    if n > 0 then
+        for i = 1, n do
+            local k = select(i, ...)
+            local v = t[k]
+            c[k] = v
+        end
+    else
+        for k,v in pairs(t) do
+            c[k] = v
+        end
+    end
+    return c
+end
+
 local function ParseErr(errhandler, ret, err)
     if not ret then
         if errhandler then

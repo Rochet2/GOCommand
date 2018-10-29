@@ -34,8 +34,11 @@ local StoredList = {}
 function StoredList.add(self, value)
     util.asserttype("number", value.guid, value.entry)
     util.asserttype("string", value.name)
-    add(self, {guid = value.guid, entry = value.entry, name = value.name, selected = true})
-    if self.update then self:update() end
+    util.asserttype("number", value.x, value.y, value.z, value.yaw, value.pitch, value.roll)
+    local data = util.copy(value, "x", "y", "z", "yaw", "pitch", "roll", "name", "guid", "entry")
+    data.selected = true
+    add(self, data)
+    self:update()
 end
 function StoredList.del(self, guid)
     util.asserttype("number", guid)
@@ -45,7 +48,7 @@ function StoredList.del(self, guid)
             break
         end
     end
-    if self.update then self:update() end
+    self:update()
 end
 function StoredList.getselected(self)
     local t = {}
@@ -60,20 +63,23 @@ function StoredList.selectall(self)
     for k,v in ipairs(self) do
         v.selected = sel
     end
-    if self.update then self:update() end
+    self:update()
 end
 function StoredList.selectinverse(self)
     for k,v in ipairs(self) do
         v.selected = not v.selected
     end
-    if self.update then self:update() end
+    self:update()
 end
 function StoredList.clear(self)
     local n = #self
     for i = 1, n do
         self[i] = nil
     end
-    if self.update then self:update() end
+    self:update()
+end
+function StoredList.update(self)
+    if self.uiupdater then self:uiupdater() end
 end
 
 function MakeTexture(parent)
@@ -304,6 +310,13 @@ local function MakeSelectList(data)
                 data[idx].selected = not data[idx].selected
                 UpdateItemList()
             end)
+            SetScript(t, "OnEnter", function(...)
+                if IsShiftKeyDown() and IsControlKeyDown() then
+                    local idx = s:GetValue()+i
+                    data[idx].selected = IsAltKeyDown()
+                    UpdateItemList()
+                end
+            end)
             l.label = t
             items[i] = l
         end
@@ -315,7 +328,7 @@ local function MakeSelectList(data)
     f:EnableMouseWheel(true)
     SetScript(f, "OnMouseWheel", function(self, delta) s:SetValue(s:GetValue()-delta*(IsShiftKeyDown() and GetVisibleItemsCount()/4 or 1)) end)
     
-    function data.update(self)
+    function data.uiupdater(self)
         s:SetMinMaxValues(0, max(#self-1, 0))
         UpdateListSize()
     end
@@ -352,47 +365,54 @@ local function MakeRotator()
         return mod(o, 2 * math.pi)
     end
     local a,b,c
-    local function thing()
-        local objs = StoredList:getselected()
-        local a,b,c = normalize(rad(a:GetNumber())), normalize(rad(b:GetNumber())), normalize(rad(c:GetNumber()))
-        for k,v in ipairs(objs) do
-            command.gobturn(v.guid, a,b,c)
-        end
-    end
+    -- local function thing()
+    --     local objs = StoredList:getselected()
+    --     local a,b,c = normalize(rad(a:GetNumber())), normalize(rad(b:GetNumber())), normalize(rad(c:GetNumber()))
+    --     for k,v in ipairs(objs) do
+    --         command.gobturn(v.guid, a,b,c)
+    --     end
+    -- end
     local function mouse(self, delta)
-        local value = delta*(IsShiftKeyDown() and 1 or 10)
-        local final = self:GetNumber()-value
-        final = final%360
-        final = tostring(final):sub(1,6)
-        self:SetText(final)
+        local value = self:GetNumber()
+        if value ~= 0 then
+            local final = value*delta*(IsShiftKeyDown() and 1 or 10)
+            local selected = StoredList:getselected()
+            for k,v in ipairs(selected) do
+                v[self.key] = v[self.key] + rad(final)
+                command.Move(v)
+            end
+        end
     end
     a = MakeInput(nil, f)
     AllowTooltip(a, "orientation")
-    a:SetText(0)
+    a.key = "yaw"
+    a:SetText(1)
     a:SetHeight(height)
     a:SetPoint("TOPLEFT", l, "BOTTOMLEFT")
     a:SetPoint("TOPRIGHT", l, "BOTTOMRIGHT")
-    SetScript(a, "OnTextChanged", thing)
+    --SetScript(a, "OnTextChanged", thing)
     SetScript(a, "OnMouseWheel", mouse)
     a:EnableMouseWheel(true)
     a:SetMaxLetters(5)
     b = MakeInput(nil, f)
     AllowTooltip(b, "pitch")
-    b:SetText(0)
+    b.key = "pitch"
+    b:SetText(1)
     b:SetHeight(height)
     b:SetPoint("TOPLEFT", a, "BOTTOMLEFT")
     b:SetPoint("TOPRIGHT", a, "BOTTOMRIGHT")
-    SetScript(b, "OnTextChanged", thing)
+    --SetScript(b, "OnTextChanged", thing)
     SetScript(b, "OnMouseWheel", mouse)
     b:EnableMouseWheel(true)
     b:SetMaxLetters(5)
     c = MakeInput(nil, f)
-    c:SetText(0)
+    c:SetText(1)
     AllowTooltip(c, "roll")
+    c.key = "roll"
     c:SetHeight(height)
     c:SetPoint("TOPLEFT", b, "BOTTOMLEFT")
     c:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT")
-    SetScript(c, "OnTextChanged", thing)
+    --SetScript(c, "OnTextChanged", thing)
     SetScript(c, "OnMouseWheel", mouse)
     c:EnableMouseWheel(true)
     c:SetMaxLetters(5)
@@ -438,7 +458,7 @@ local function MakeSelector()
         if entry ~= 0 then
             command.gobadd(entry, function(info)
                 self:AddHistoryLine(entry)
-                command.gpsgob(info.guid, function(info2)
+                command.gobinfoguid(info.guid, function(info2)
                     local mrg = util.merge(info, info2)
                     StoredList:add(mrg)
                 end)
@@ -455,7 +475,7 @@ local function MakeSelector()
         local range = self:GetNumber()
         command.gobnear(range, function(info)
             for k,v in ipairs(info) do
-                command.gpsgob(v.guid,
+                command.gobinfoguid(v.guid,
                 function(info2)
                     local mrg = util.merge(v, info2)
                     StoredList:add(mrg)
@@ -477,7 +497,9 @@ local function MakeSelector()
         local namepart = self:GetText()
         command.gobtargetname(namepart, function(info)
             self:AddHistoryLine(namepart)
-            StoredList:add(info)
+            command.gobinfoguid(info.guid, function(info2)
+                StoredList:add(util.merge(info, info2))
+            end)
         end)
     end)
     
@@ -493,7 +515,9 @@ local function MakeSelector()
         if entry ~= 0 then
             command.gobtargetentry(entry, function(info)
                 self:AddHistoryLine(entry)
-                StoredList:add(info)
+                command.gobinfoguid(info.guid, function(info2)
+                    StoredList:add(util.merge(info, info2))
+                end)
             end)
         end
     end)
@@ -510,24 +534,10 @@ local function MakeSelector()
         if guid ~= 0 then
             command.gobinfoguid(guid, function(info)
                 self:AddHistoryLine(guid)
-                command.gpsgob(guid, function(info2)
-                    local mrg = util.merge(info, info2)
-                    mrg.guid = guid
-                    StoredList:add(mrg)
-                end)
+                StoredList:add(info)
             end)
         end
     end)
-    local old = ChatFrame_OnHyperlinkShow
-    function ChatFrame_OnHyperlinkShow(self, link, text, button, ...)
-        old(self, link, text, button, ...)
-        if GetCurrentKeyBoardFocus() == byguid then
-            local guid = link:match("gameobject:(%d+)")
-            if guid then
-                byguid:SetText(guid)
-            end
-        end
-    end
     
     local target = MakeButton(nil, f)
     target:SetHeight(height)
@@ -535,8 +545,10 @@ local function MakeSelector()
     target:SetPoint("TOPLEFT", byguid, "BOTTOMLEFT")
     target:SetPoint("TOPRIGHT", byguid, "BOTTOMRIGHT")
     SetScript(target, "OnClick", function(self)
-        command.gobtarget(function(data)
-            StoredList:add(data)
+        command.gobtarget(function(data1)
+            command.gobinfoguid(data1.guid, function(data2)
+                StoredList:add(util.merge(data1, data2))
+            end)
         end)
     end)
     
@@ -587,7 +599,8 @@ local function MakeMover()
         local objs = StoredList:getselected()
         command.gpsplayer(function(gpsplayer)
             for k,v in ipairs(objs) do
-                command.gobmovepos(v.guid, gpsplayer.x, gpsplayer.y, gpsplayer.z)
+                v.x, v.y, v.z = gpsplayer.x, gpsplayer.x, gpsplayer.y, gpsplayer.z
+                command.Move(v)
             end
         end)
     end)
@@ -599,59 +612,6 @@ local function MakeMover()
     t:SetTextColor(0,0,0)
     t:SetText("Move")
     
-    local moveque = {}
-    local function domove(guid, ox, oy, oz, oo, delta)
-        local noque = not moveque[guid]
-        moveque[guid] = moveque[guid] or {}
-        tinsert(moveque[guid], {guid=guid, x=ox, y=oy, z=oz, o=oo, d=delta})
-        if noque then
-            local function shebang()
-                command.gpsgob(guid, function(gps)
-                    local tx, ty, tz, to = gps.x, gps.y, gps.z, gps.o
-                    for k,offset in ipairs(moveque[guid]) do
-                        if offset.x or offset.y or offset.d then
-                            local x, y, o = offset.x, offset.y, deg(offset.d or gps.o)
-                            local mx = x*cos(o)-y*sin(o)
-                            local my = x*sin(o)+y*cos(o)
-                            gps.x = gps.x+mx
-                            gps.y = gps.y+my
-                        end
-                        if offset.o then
-                            gps.o = gps.o+offset.o
-                        end
-                        if offset.z then
-                            gps.z = gps.z+offset.z
-                        end
-                    end
-                    local done = 0
-                    local function callfinished()
-                        done = done-1
-                        if done == 0 then
-                            if #moveque[guid] == 0 then
-                                moveque[guid] = nil
-                            else
-                                shebang()
-                            end
-                        end
-                    end
-                    local madecall = false
-                    if gps.x ~= tx or gps.y ~= ty or gps.z ~= tz then
-                        done = done+1
-                        command.gobmovepos(guid, gps.x, gps.y, gps.z, callfinished, callfinished)
-                        madecall = true
-                    end
-                    if gps.o ~= to then
-                        done = done+1
-                        command.gobturn(guid, gps.o, 0, 0, callfinished, callfinished)
-                        madecall = true
-                    end
-                    moveque[guid] = madecall and {} or nil
-                end, function() moveque[guid] = nil end)
-            end
-            shebang()
-        end
-    end
-    
     local function mouse(self, delta)
         local value = delta*self:GetNumber()
         if IsShiftKeyDown() then value = value/10 end
@@ -660,13 +620,14 @@ local function MakeMover()
         if value == 0 then return end
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
-            local offset = {x=0, y=0, z=0}
-            offset[self.key] = offset[self.key]+value
-            local orients = {}
-            orients[1] = GetPlayerFacing()
-            orients[2] = nil
-            orients[3] = 0
-            domove(v.guid, offset.x, offset.y, offset.z, nil, orients[((changeorient.orient or 1)%3)+1])
+            local offset = {x=0,y=0,z=0}
+            offset[self.key] = value
+            local orients = {GetPlayerFacing(), v.yaw, 0}
+            local x, y, o = offset.x, offset.y, deg(orients[((changeorient.orient or 1)%(#orients))+1])
+            offset.x = x*cos(o)-y*sin(o)
+            offset.y = x*sin(o)+y*cos(o)
+            v.x, v.y, v.z = v.x+offset.x, v.y+offset.y, v.z+offset.z
+            command.Move(v)
         end
     end
 
@@ -726,13 +687,11 @@ local function MakeMover()
         local selected = StoredList:getselected()
         command.gpsplayer(function(gpsplayer)
             for k,v in ipairs(selected) do
-                command.gpsgob(v.guid, function(gps)
-                    local x, y, o = gps.x-gpsplayer.x, gps.y-gpsplayer.y, odiff
-                    local x1 = x*cos(o)-y*sin(o)
-                    local y1 = x*sin(o)+y*cos(o)
-                    command.gobmovepos(v.guid, gpsplayer.x+x1, gpsplayer.y+y1, gps.z)
-                    command.gobturn(v.guid, gps.o+rad(odiff), 0, 0)
-                end)
+                local x, y, o = v.x-gpsplayer.x, v.y-gpsplayer.y, odiff
+                local x1 = x*cos(o)-y*sin(o)
+                local y1 = x*sin(o)+y*cos(o)
+                v.x, v.y, v.yaw = gpsplayer.x+x1, gpsplayer.y+y1, v.yaw+rad(odiff)
+                command.Move(v)
             end
         end)
     end)
@@ -747,30 +706,23 @@ local function MakeMover()
     SetScript(rotatearoundgob, "OnMouseWheel", function(self, delta)
         local odiff = delta*self:GetNumber() -- deg
         local selected = StoredList:getselected()
-        local data = {}
-        local objectcount = #selected
+        
+        -- calculate center point
+        local centerx, centery = 0,0
         for k,v in ipairs(selected) do
-            command.gpsgob(v.guid, function(gps)
-                gps.guid = v.guid
-                tinsert(data, gps)
-                if #data == objectcount then
-                    local centerx, centery = 0,0
-                    for k,v in ipairs(data) do
-                        centerx = centerx+v.x
-                        centery = centery+v.y
-                    end
-                    centerx = centerx/objectcount
-                    centery = centery/objectcount
-                    
-                    for k,gps in ipairs(data) do
-                        local x, y, o = gps.x-centerx, gps.y-centery, odiff
-                        local x1 = x*cos(o)-y*sin(o)
-                        local y1 = x*sin(o)+y*cos(o)
-                        command.gobmovepos(gps.guid, centerx+x1, centery+y1, gps.z)
-                        command.gobturn(gps.guid, gps.o+rad(odiff), 0, 0)
-                    end
-                end
-            end)
+            centerx = centerx+v.x
+            centery = centery+v.y
+        end
+        centerx = centerx/#selected
+        centery = centery/#selected
+        
+        -- move around center
+        for k,v in ipairs(selected) do
+            local x, y, o = v.x-centerx, v.y-centery, odiff
+            local x1 = x*cos(o)-y*sin(o)
+            local y1 = x*sin(o)+y*cos(o)
+            v.x, v.y, v.yaw = centerx+x1, centery+y1, v.yaw+rad(odiff)
+            command.Move(v)
         end
     end)
     rotatearoundgob:EnableMouseWheel(true)
@@ -825,7 +777,8 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             command.gpsgob(v.guid, function(gps)
-                command.gobmovepos(v.guid, gps.x, gps.y, gps.groundz)
+                v.z = gps.groundz
+                command.Move(v)
             end)
         end
     end)
@@ -839,7 +792,8 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             command.gpsgob(v.guid, function(gps)
-                command.gobmovepos(v.guid, gps.x, gps.y, gps.floorz)
+                v.z = gps.floorz
+                command.Move(v)
             end)
         end
     end)
@@ -853,9 +807,8 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             command.gpsplayer(function(gpsplayer)
-                command.gpsgob(v.guid, function(gps)
-                    command.gobmovepos(v.guid, gpsplayer.x, gps.y, gps.z)
-                end)
+                v.x = gpsplayer.x
+                command.Move(v)
             end)
         end
     end)
@@ -869,9 +822,8 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             command.gpsplayer(function(gpsplayer)
-                command.gpsgob(v.guid, function(gps)
-                    command.gobmovepos(v.guid, gps.x, gpsplayer.y, gps.z)
-                end)
+                v.y = gpsplayer.y
+                command.Move(v)
             end)
         end
     end)
@@ -885,9 +837,8 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             command.gpsplayer(function(gpsplayer)
-                command.gpsgob(v.guid, function(gps)
-                    command.gobmovepos(v.guid, gps.x, gps.y, gpsplayer.z)
-                end)
+                v.z = gpsplayer.z
+                command.Move(v)
             end)
         end
     end)
@@ -900,7 +851,8 @@ local function MakeMassAction()
     SetScript(O, "OnClick", function(self)
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
-            command.gobturn(v.guid, GetPlayerFacing(), 0, 0)
+            v.yaw = GetPlayerFacing()
+            command.Move(v)
         end
     end)
     
@@ -913,14 +865,14 @@ local function MakeMassAction()
         local objs = StoredList:getselected()
         for k,v in ipairs(objs) do
             v.selected = false
-            command.gpsgob(v.guid, function(gps)
-                command.gobadd(v.entry, function(info)
-                    StoredList:add(info)
-                    command.gobmovepos(info.guid, gps.x, gps.y, gps.z)
-                    command.gobturn(info.guid, gps.o, 0, 0)
-                end)
+            command.gobadd(v.entry, function(info)
+                local c = util.copy(v)
+                c.guid = info.guid
+                StoredList:add(c)
+                command.Move(c)
             end)
         end
+        StoredList:update()
     end)
     
     f:Show()
@@ -1001,11 +953,7 @@ function MakeClipboard()
             clip.playerorientation = GetPlayerFacing()
             clip.data = {}
             for k,v in ipairs(selected) do
-                command.gpsgob(v.guid, function(gps)
-                    if gpsplayer.map == gps.map then
-                        tinsert(clip.data, {entry = v.entry, x=gps.x-gpsplayer.x, y=gps.y-gpsplayer.y, z=gps.z-gpsplayer.z, o=gps.o})
-                    end
-                end)
+                tinsert(clip.data, {entry = v.entry, x=v.x-gpsplayer.x, y=v.y-gpsplayer.y, z=v.z-gpsplayer.z, yaw=v.yaw, pitch=v.pitch, roll=v.roll})
             end
         end)
     end)
@@ -1022,7 +970,7 @@ function MakeClipboard()
             for k,v in ipairs(selected) do
                 command.gpsgob(v.guid, function(gps)
                     if gpsplayer.map == gps.map then
-                        tinsert(clip.data, {entry = v.entry, x=gps.x-gpsplayer.x, y=gps.y-gpsplayer.y, z=gps.z-gpsplayer.z, o=gps.o})
+                        tinsert(clip.data, {entry = v.entry, x=v.x-gpsplayer.x, y=v.y-gpsplayer.y, z=v.z-gpsplayer.z, yaw=v.yaw, pitch=v.pitch, roll=v.roll})
                         command.gobdelete(v.guid, function() StoredList:del(v.guid) end)
                     end
                 end)
@@ -1038,9 +986,10 @@ function MakeClipboard()
     SetScript(paste, "OnClick", function(self)
         for k,v in ipairs(clip.data) do
             command.gobadd(v.entry, function(info)
+                info = util.merge(v, info)
+                info.x, info.y, info.z, info.yaw, info.pitch, info.roll = info.x+v.x, info.y+v.y, info.z+v.z, v.yaw, v.pitch, v.roll
                 StoredList:add(info)
-                command.gobturn(info.guid, v.o, 0, 0)
-                command.gobmovepos(info.guid, info.x+v.x, info.y+v.y, info.z+v.z)
+                command.Move(info)
             end)
         end
     end)
@@ -1054,12 +1003,13 @@ function MakeClipboard()
         local odiff = GetPlayerFacing() - clip.playerorientation
         for k,v in ipairs(clip.data) do
             command.gobadd(v.entry, function(info)
-                StoredList:add(info)
+                info = util.merge(v, info)
                 local x, y, o = v.x, v.y, deg(odiff)
                 local x1 = x*cos(o)-y*sin(o)
                 local y1 = x*sin(o)+y*cos(o)
-                command.gobmovepos(info.guid, info.x+x1, info.y+y1, info.z+v.z)
-                command.gobturn(info.guid, v.o+odiff, 0, 0)
+                info.x, info.y, info.z, info.yaw, info.pitch, info.roll = info.x+x1, info.y+y1, info.z+v.z, v.yaw+odiff, v.pitch, v.roll
+                StoredList:add(info)
+                command.Move(info)
             end)
         end
     end)
@@ -1077,3 +1027,16 @@ SetScript(f, "OnEvent", function(self, event, message)
         StoredList:del(guid)
     end
 end)
+
+local old = ChatFrame_OnHyperlinkShow
+function ChatFrame_OnHyperlinkShow(self, link, text, button, ...)
+    old(self, link, text, button, ...)
+    local kbf = GetCurrentKeyBoardFocus()
+    if not kbf then return end
+    if IsControlKeyDown() then
+        local value = link:match("^[^:]*:([^:]*)")
+        if value then
+            kbf:Insert(value)
+        end
+    end
+end

@@ -17,7 +17,7 @@ function parser.gps(tbl)
     t.indoors = not tbl[1]:find("outdoors")
     t.outdoors = not t.indoors
     t.map, t.zone, t.area, t.phase = tonumberall(tbl[2]:match("Map: (%d+) .* Zone: (%d+) .* Area: (%d+) .* Phase: (%d+)"))
-    t.x, t.y, t.z, t.o = tonumberall(tbl[3]:match("X: (%-?%d+%.%d+) Y: (%-?%d+%.%d+) Z: (%-?%d+%.%d+) Orientation: (%-?%d+%.%d+)"))
+    t.x, t.y, t.z, t.yaw = tonumberall(tbl[3]:match("X: (%-?%d+%.%d+) Y: (%-?%d+%.%d+) Z: (%-?%d+%.%d+) Orientation: (%-?%d+%.%d+)"))
     t.instanceid = tonumberall(tbl[4]:match("InstanceID: (%d+)"))
     t.zonex, t.zoney = tonumberall(tbl[5]:match("ZoneX: (%-?%d+%.%d+) ZoneY: (%-?%d+%.%d+)"))
     t.groundz, t.floorz = tonumberall(tbl[6]:match("GroundZ: (%-?%d+%.%d+) FloorZ: (%-?%d+%.%d+)"))
@@ -32,7 +32,7 @@ function parser.gobtarget(tbl)
     t.name = assert(tbl[2]:match("%[(.*)%]"))
     t.guid, t.entry = tonumberall(tbl[2]:match("GUID: (%d+) ID: (%d+)"))
     t.x, t.y, t.z, t.map = tonumberall(tbl[3]:match("X: (%-?%d+%.%d+) Y: (%-?%d+%.%d+) Z: (%-?%d+%.%d+) MapId: (%d+)"))
-    t.o = tonumberall(tbl[4]:match("Orientation: (%-?%d+%.%d+)"))
+    t.yaw = tonumberall(tbl[4]:match("Orientation: (%-?%d+%.%d+)"))
     return t
 end
 
@@ -48,27 +48,32 @@ function parser.gobnear(tbl)
     return t
 end
 
+local matchers = {
+    {{"entry"}, {"number"}, "^Entry: (%d+)"},
+    {{"name"}, {"string"}, "^Name: (.*)"},
+    {{"size"}, {"number"}, "^Size: (%-?%d+%.%d+)"},
+    {{"guid", "x", "y", "z"}, {"number", "number", "number", "number"}, "^SpawnID: (%d+), location %((%-?%d+%.%d+), (%-?%d+%.%d+), (%-?%d+%.%d+)%)"},
+    {{"yaw", "pitch", "roll"}, {"number", "number", "number"}, "^yaw: (%-?%d+%.%d+) pitch: (%-?%d+%.%d+) roll: (%-?%d+%.%d+)"},
+    {{"maxx", "maxy", "maxz", "minx", "miny", "minz"}, {"number", "number", "number", "number", "number", "number"}, "^Model dimensions from center: Max X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+) Min X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+)"},
+}
 function parser.gobinfo(tbl)
-    assert(#tbl == 9 or #tbl == 14)
     local t = {}
-    if #tbl == 9 then
-        t.entry = tonumberall(tbl[1]:match("Entry: (%d+)"))
-        t.type = tonumberall(tbl[2]:match("Type: (%d+)"))
-        t.lootid = tonumberall(tbl[3]:match("Lootid: (%d+)"))
-        t.displayid = tonumberall(tbl[4]:match("DisplayID: (%d+)"))
-        t.name = assert(tbl[5]:match("Name: (.*)"))
-        t.size = tonumberall(tbl[6]:match("Size: (%-?%d+%.%d+)"))
-        t.faction, t.flags = tonumberall(tbl[7]:match("Faction: (%d+) Flags: (%d+)"))
-        t.maxx, t.maxy, t.maxz, t.minx, t.miny, t.minz = tonumberall(tbl[9]:match("Model dimensions from center: Max X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+) Min X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+)"))
-    elseif #tbl == 14 then
-        t.entry = tonumberall(tbl[4]:match("Entry: (%d+)"))
-        t.type = tonumberall(tbl[5]:match("Type: (%d+)"))
-        t.lootid = tonumberall(tbl[6]:match("Lootid: (%d+)"))
-        t.displayid = tonumberall(tbl[7]:match("DisplayID: (%d+)"))
-        t.name = assert(tbl[9]:match("Name: (.*)"))
-        t.size = tonumberall(tbl[10]:match("Size: (%-?%d+%.%d+)"))
-        t.faction, t.flags = tonumberall(tbl[11]:match("Faction: (%d+) Flags: (%d+)"))
-        t.maxx, t.maxy, t.maxz, t.minx, t.miny, t.minz = tonumberall(tbl[14]:match("Model dimensions from center: Max X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+) Min X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+)"))
+    for k1,row in ipairs(tbl) do
+        for k2,matchdata in ipairs(matchers) do
+            local matched = {row:match(matchdata[3])}
+            if matched[1] then
+                for k3, expectedtype in ipairs(matchdata[2]) do
+                    if expectedtype == "number" then
+                        t[matchdata[1][k3]] = assert(tonumber(matched[k3]), string.format("expected %s, got %s", expectedtype, matched[k3]))
+                    elseif expectedtype == "string" then
+                        t[matchdata[1][k3]] = matched[k3]
+                    else
+                        error("Invalid type given", 0)
+                    end
+                end
+                break
+            end
+        end
     end
     return t
 end
@@ -158,4 +163,37 @@ function command.gpsplayer(...)
 end
 function command.gpsgob(lowguid, ...)
     libtrinity:DoCommand(string.format("gps |Hgameobject:%d|h", lowguid), makecallback(parser.gps, ...))
+end
+
+local movedata = {}
+local function move(data)
+    movedata[data.guid] = true
+    local done = 0
+    local function finished()
+        done = done-1
+        if done == 0 then
+            if movedata[data.guid] == true then
+                movedata[data.guid] = nil
+            else
+                move(movedata[data.guid])
+            end
+        end
+    end
+    if data.x or data.y or data.z then
+        done = done+1
+        util.asserttype("number", data.x, data.y, data.z)
+        command.gobmovepos(data.guid, data.x, data.y, data.z, finished, finished)
+    end
+    if data.yaw or data.pitch or data.roll then
+        done = done+1
+        util.asserttype("number", data.yaw, data.pitch, data.roll)
+        command.gobturn(data.guid, data.yaw, data.pitch, data.roll, finished, finished)
+    end
+end
+function command.Move(data)
+    if not movedata[data.guid] then
+        move(data)
+    else
+        movedata[data.guid] = data
+    end
 end
