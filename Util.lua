@@ -1,4 +1,5 @@
 assert(not GOCommand)
+GOCommandSV = GOCommandSV or {}
 GOCommand = {}
 GOCommand.util = {}
 local util = GOCommand.util

@@ -53,7 +53,7 @@ local matchers = {
     {{"name"}, {"string"}, "^Name: (.*)"},
     {{"size"}, {"number"}, "^Size: (%-?%d+%.%d+)"},
     {{"guid", "x", "y", "z"}, {"number", "number", "number", "number"}, "^SpawnID: (%d+), location %((%-?%d+%.%d+), (%-?%d+%.%d+), (%-?%d+%.%d+)%)"},
-    {{"yaw", "pitch", "roll"}, {"number", "number", "number"}, "^yaw: (%-?%d+%.%d+) pitch: (%-?%d+%.%d+) roll: (%-?%d+%.%d+)"},
+    {{"yaw", "pitch", "roll"}, {"number", "number", "number"}, "^yaw: (.+) pitch: (.+) roll: (.+)"},
     {{"maxx", "maxy", "maxz", "minx", "miny", "minz"}, {"number", "number", "number", "number", "number", "number"}, "^Model dimensions from center: Max X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+) Min X (%-?%d+%.%d+) Y (%-?%d+%.%d+) Z (%-?%d+%.%d+)"},
 }
 function parser.gobinfo(tbl)
@@ -64,7 +64,11 @@ function parser.gobinfo(tbl)
             if matched[1] then
                 for k3, expectedtype in ipairs(matchdata[2]) do
                     if expectedtype == "number" then
-                        t[matchdata[1][k3]] = assert(tonumber(matched[k3]), string.format("expected %s, got %s", expectedtype, matched[k3]))
+                        if matched[k3]:find("nan") or matched[k3]:find("inf") then
+                            t[matchdata[1][k3]] = 0
+                        else
+                            t[matchdata[1][k3]] = assert(tonumber(matched[k3]), string.format("expected %s, got %s", expectedtype, matched[k3]))
+                        end
                     elseif expectedtype == "string" then
                         t[matchdata[1][k3]] = matched[k3]
                     else

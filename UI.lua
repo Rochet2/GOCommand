@@ -82,9 +82,9 @@ function StoredList.update(self)
     if self.uiupdater then self:uiupdater() end
 end
 
-function MakeTexture(parent)
+function MakeTexture(parent, r, g, b, o)
     local texture = parent:CreateTexture()
-    texture:SetTexture(random(), random(), random(), 1)
+    texture:SetTexture(r or 0.5, g or 0.5, b or 0.5, o or 1)
     return texture
 end
 
@@ -114,9 +114,9 @@ function MakeSlider(name, parent, template)
     slider:SetValueStep(1)
     slider:SetMinMaxValues(0, 100)
     slider:SetValue(0)
-    local texture = MakeTexture(slider)
+    local texture = MakeTexture(slider, nil, 1)
     texture:SetAllPoints(slider)
-    local thumbTexture = MakeTexture(slider)
+    local thumbTexture = MakeTexture(slider, 1)
     thumbTexture:SetSize(8, 8)
     slider:SetThumbTexture(thumbTexture)
     slider:SetOrientation("HORIZONTAL")
@@ -186,6 +186,7 @@ local function MakeSelectList(data)
     b:SetPoint("TOPRIGHT")
     b:SetSize(10, 10)
     b:SetText("X")
+    AllowTooltip(b, "close the menu")
     MakeTexture(b):SetAllPoints(b)
     SetScript(b, "OnClick", function(self) self:GetParent():Hide() end)
 
@@ -193,6 +194,7 @@ local function MakeSelectList(data)
     selectall:SetPoint("TOPRIGHT", b, "TOPLEFT")
     selectall:SetSize(10, 10)
     selectall:SetText("A")
+    AllowTooltip(selectall, "select all")
     MakeTexture(selectall):SetAllPoints(selectall)
     SetScript(selectall, "OnClick", function(self) data:selectall() end)
 
@@ -200,6 +202,7 @@ local function MakeSelectList(data)
     selectinv:SetPoint("TOPRIGHT", selectall, "TOPLEFT")
     selectinv:SetSize(10, 10)
     selectinv:SetText("I")
+    AllowTooltip(selectinv, "select inverse")
     MakeTexture(selectinv):SetAllPoints(selectinv)
     SetScript(selectinv, "OnClick", function(self) data:selectinverse() end)
 
@@ -207,6 +210,7 @@ local function MakeSelectList(data)
     clear:SetPoint("TOPRIGHT", selectinv, "TOPLEFT")
     clear:SetSize(10, 10)
     clear:SetText("C")
+    AllowTooltip(clear, "clear the list")
     MakeTexture(clear):SetAllPoints(clear)
     SetScript(clear, "OnClick", function(self) data:clear() end)
 
@@ -221,7 +225,7 @@ local function MakeSelectList(data)
     local r = MakeButton(nil, f)
     r:SetPoint("BOTTOMRIGHT")
     r:SetSize(10, 10)
-    MakeTexture(r):SetAllPoints(r)
+    MakeTexture(r, 1):SetAllPoints(r)
     r:RegisterForDrag("LeftButton")
     SetScript(r, "OnDragStart", function(self) self:GetParent():StartSizing("BOTTOMRIGHT") end)
     SetScript(r, "OnDragStop", function(self) self:GetParent():StopMovingOrSizing() end)
@@ -542,6 +546,7 @@ local function MakeSelector()
     local target = MakeButton(nil, f)
     target:SetHeight(height)
     target:SetText("closest")
+    AllowTooltip(target, "select closest object")
     target:SetPoint("TOPLEFT", byguid, "BOTTOMLEFT")
     target:SetPoint("TOPRIGHT", byguid, "BOTTOMRIGHT")
     SetScript(target, "OnClick", function(self)
@@ -561,7 +566,7 @@ local function MakeMover()
     local height = 10
     local f = MakeFrame("mover")
     f:SetToplevel(true)
-    f:SetSize(width, height*5)
+    f:SetSize(width, height*6)
     f:RegisterForDrag("LeftButton")
     f:SetPoint("CENTER")
     f:EnableMouse(true)
@@ -584,6 +589,7 @@ local function MakeMover()
     changeorient:SetSize(10, 10)
     changeorient.orient = 0
     changeorient:SetText(orients_text[(changeorient.orient%#orients_text)+1])
+    AllowTooltip(changeorient, "Object is moved relative to\nP: player\nO: object\nC: compass")
     MakeTexture(changeorient):SetAllPoints(changeorient)
     SetScript(changeorient, "OnClick", function(self)
         self.orient = self.orient+1
@@ -594,12 +600,14 @@ local function MakeMover()
     move:SetPoint("TOPRIGHT", changeorient, "TOPLEFT")
     move:SetSize(10, 10)
     move:SetText("M")
+    AllowTooltip(move, "Move objects to your position")
     MakeTexture(move):SetAllPoints(move)
     SetScript(move, "OnClick", function(self)
         local objs = StoredList:getselected()
         command.gpsplayer(function(gpsplayer)
+            print("woob")
             for k,v in ipairs(objs) do
-                v.x, v.y, v.z = gpsplayer.x, gpsplayer.x, gpsplayer.y, gpsplayer.z
+                v.x, v.y, v.z = gpsplayer.x, gpsplayer.y, gpsplayer.z
                 command.Move(v)
             end
         end)
@@ -662,7 +670,7 @@ local function MakeMover()
     z:EnableMouseWheel(true)
 
     local copydimensions = MakeInput(nil, f)
-    AllowTooltip(copydimensions, "load dimensions of given object entry")
+    AllowTooltip(copydimensions, "load dimensions of given object entry. Click, input a number and press enter.")
     copydimensions:SetNumeric(true)
     copydimensions:SetMaxLetters(10)
     copydimensions:SetHeight(height)
@@ -676,12 +684,29 @@ local function MakeMover()
         end)
     end)
 
+    local copydimensionsbutton = MakeButton(nil, f)
+    AllowTooltip(copydimensionsbutton, "load dimensions of first found selected object")
+    copydimensionsbutton:SetText("Load")
+    copydimensionsbutton:SetHeight(height)
+    copydimensionsbutton:SetPoint("TOPLEFT", copydimensions, "BOTTOMLEFT")
+    copydimensionsbutton:SetPoint("TOPRIGHT", copydimensions, "BOTTOMRIGHT")
+    SetScript(copydimensionsbutton, "OnClick", function(self)
+        local selected = StoredList:getselected()
+        if selected[1] then
+          command.gobinfoentry(selected[1].entry, function(info)
+              x:SetText((info.maxx-info.minx)*info.size)
+              y:SetText((info.maxy-info.miny)*info.size)
+              z:SetText((info.maxz-info.minz)*info.size)
+          end)
+        end
+    end)
+
     local rotatearoundplayer = MakeInput(nil, f)
     AllowTooltip(rotatearoundplayer, "rotate objects around player")
     rotatearoundplayer:SetText(1)
     rotatearoundplayer:SetHeight(height)
-    rotatearoundplayer:SetPoint("TOPLEFT", copydimensions, "BOTTOMLEFT")
-    rotatearoundplayer:SetPoint("TOPRIGHT", copydimensions, "BOTTOMRIGHT")
+    rotatearoundplayer:SetPoint("TOPLEFT", copydimensionsbutton, "BOTTOMLEFT")
+    rotatearoundplayer:SetPoint("TOPRIGHT", copydimensionsbutton, "BOTTOMRIGHT")
     SetScript(rotatearoundplayer, "OnMouseWheel", function(self, delta)
         local odiff = delta*self:GetNumber() -- deg
         local selected = StoredList:getselected()
@@ -698,7 +723,7 @@ local function MakeMover()
     rotatearoundplayer:EnableMouseWheel(true)
 
     local rotatearoundgob = MakeInput(nil, f)
-    AllowTooltip(rotatearoundgob, "rotate objects around their center point")
+    AllowTooltip(rotatearoundgob, "rotate objects around their center of mass")
     rotatearoundgob:SetText(1)
     rotatearoundgob:SetHeight(height)
     rotatearoundgob:SetPoint("TOPLEFT", rotatearoundplayer, "BOTTOMLEFT")
@@ -757,6 +782,7 @@ local function MakeMassAction()
     
     local delete = MakeButton(nil, f)
     delete:SetText("Delete")
+    AllowTooltip(delete, "delete selected objects")
     delete:SetHeight(height)
     delete:SetPoint("TOPLEFT", l, "BOTTOMLEFT")
     delete:SetPoint("TOPRIGHT", l, "BOTTOMRIGHT")
@@ -770,6 +796,7 @@ local function MakeMassAction()
     
     local ground = MakeButton(nil, f)
     ground:SetText("Ground")
+    AllowTooltip(ground, "move selected objects to ground level")
     ground:SetHeight(height)
     ground:SetPoint("TOPLEFT", delete, "BOTTOMLEFT")
     ground:SetPoint("TOPRIGHT", delete, "BOTTOMRIGHT")
@@ -785,6 +812,7 @@ local function MakeMassAction()
     
     local floor = MakeButton(nil, f)
     floor:SetText("Floor")
+    AllowTooltip(floor, "move selected objects to closest floor contact")
     floor:SetHeight(height)
     floor:SetPoint("TOPLEFT", ground, "BOTTOMLEFT")
     floor:SetPoint("TOPRIGHT", ground, "BOTTOMRIGHT")
@@ -800,6 +828,7 @@ local function MakeMassAction()
     
     local X = MakeButton(nil, f)
     X:SetText("X")
+    AllowTooltip(X, "move selected objects to your X coordinate")
     X:SetHeight(height)
     X:SetPoint("TOPLEFT", floor, "BOTTOMLEFT")
     X:SetPoint("TOPRIGHT", floor, "BOTTOMRIGHT")
@@ -815,6 +844,7 @@ local function MakeMassAction()
     
     local Y = MakeButton(nil, f)
     Y:SetText("Y")
+    AllowTooltip(Y, "move selected objects to your Y coordinate")
     Y:SetHeight(height)
     Y:SetPoint("TOPLEFT", X, "BOTTOMLEFT")
     Y:SetPoint("TOPRIGHT", X, "BOTTOMRIGHT")
@@ -830,6 +860,7 @@ local function MakeMassAction()
     
     local Z = MakeButton(nil, f)
     Z:SetText("Z")
+    AllowTooltip(Z, "move selected objects to your Z coordinate")
     Z:SetHeight(height)
     Z:SetPoint("TOPLEFT", Y, "BOTTOMLEFT")
     Z:SetPoint("TOPRIGHT", Y, "BOTTOMRIGHT")
@@ -845,6 +876,7 @@ local function MakeMassAction()
     
     local O = MakeButton(nil, f)
     O:SetText("Rotation")
+    AllowTooltip(O, "rotate selected objects to your orientation")
     O:SetHeight(height)
     O:SetPoint("TOPLEFT", Z, "BOTTOMLEFT")
     O:SetPoint("TOPRIGHT", Z, "BOTTOMRIGHT")
@@ -857,7 +889,8 @@ local function MakeMassAction()
     end)
     
     local copy = MakeButton(nil, f)
-    copy:SetText("Copy")
+    copy:SetText("Dupe")
+    AllowTooltip(copy, "spawn copies of selected objects")
     copy:SetHeight(height)
     copy:SetPoint("TOPLEFT", O, "BOTTOMLEFT")
     copy:SetPoint("TOPRIGHT", O, "BOTTOMRIGHT")
@@ -944,6 +977,7 @@ function MakeClipboard()
     local clip = {playerorientation = 0, data = {}}
     local copy = MakeButton(nil, f)
     copy:SetText("Copy")
+    AllowTooltip(copy, "place selected objects to clipboard")
     copy:SetHeight(height)
     copy:SetPoint("TOPLEFT", l, "BOTTOMLEFT")
     copy:SetPoint("TOPRIGHT", l, "BOTTOMRIGHT")
@@ -959,6 +993,7 @@ function MakeClipboard()
     end)
     local cut = MakeButton(nil, f)
     cut:SetText("Cut")
+    AllowTooltip(cut, "place selected objects to clipboard and delete them")
     cut:SetHeight(height)
     cut:SetPoint("TOPLEFT", copy, "BOTTOMLEFT")
     cut:SetPoint("TOPRIGHT", copy, "BOTTOMRIGHT")
@@ -980,6 +1015,7 @@ function MakeClipboard()
     
     local paste = MakeButton(nil, f)
     paste:SetText("Paste")
+    AllowTooltip(paste, "paste clipboard relative to player xyz")
     paste:SetHeight(height)
     paste:SetPoint("TOPLEFT", cut, "BOTTOMLEFT")
     paste:SetPoint("TOPRIGHT", cut, "BOTTOMRIGHT")
@@ -996,6 +1032,7 @@ function MakeClipboard()
     
     local pasterelative = MakeButton(nil, f)
     pasterelative:SetText("Paste relative")
+    AllowTooltip(pasterelative, "paste clipboard relative to player xyz and orientation")
     pasterelative:SetHeight(height)
     pasterelative:SetPoint("TOPLEFT", paste, "BOTTOMLEFT")
     pasterelative:SetPoint("TOPRIGHT", paste, "BOTTOMRIGHT")
@@ -1040,3 +1077,195 @@ function ChatFrame_OnHyperlinkShow(self, link, text, button, ...)
         end
     end
 end
+
+-- GOCommandSV.bindings = {{code = "", key = ""}}
+
+function MakeScroll(slider, contentarea, item_create, item_show, item_hide)
+    local items = {}
+    local requireditems = 0
+    local itemheight = 0
+
+    slider:SetValueStep(1)
+
+    local head = MakeLayer(contentarea)
+    head:SetPoint("TOPLEFT")
+    head:SetPoint("TOPRIGHT")
+    head:SetPoint("BOTTOMLEFT", contentarea, "TOPLEFT")
+    head:SetPoint("BOTTOMRIGHT", contentarea, "TOPRIGHT")
+    
+    local function GetVisibleItemsCount()
+        return floor(contentarea:GetHeight()/itemheight)
+    end
+    
+    local function UpdateItemList()
+        local value = slider:GetValue()
+        local visibleitems = GetVisibleItemsCount()
+        for k,v in ipairs(items) do
+            local idx = value+k
+            if k > visibleitems or value+k>requireditems then
+                item_hide(v, idx)
+                v:Hide()
+            else
+                item_show(v, idx)
+                v:Show()
+            end
+        end
+    end
+
+    local function UpdateListSize()
+        for i = #items+1, GetVisibleItemsCount() do
+            local contact = items[i-1] or head
+            local l = MakeLayer(contentarea)
+            l:SetPoint("TOPLEFT", contact, "BOTTOMLEFT")
+            l:SetPoint("TOPRIGHT", contact, "BOTTOMRIGHT")
+            l:SetHeight(itemheight)
+            items[i] = l
+            local idx = slider:GetValue()+i
+            item_create(l, idx)
+        end
+        UpdateItemList()
+    end
+    
+    SetScript(contentarea, "OnSizeChanged", UpdateListSize)
+    SetScript(slider, "OnValueChanged", UpdateItemList)
+    
+    local function SetItemCount(count)
+        assert(count >= 0)
+        requireditems = count
+        slider:SetMinMaxValues(0, max(requireditems-1, 0))
+        UpdateItemList()
+    end
+    
+    local function SetItemHeight(height)
+        assert(height >= 0)
+        itemheight = height
+        for k,v in ipairs(items) do
+            v:SetHeight(itemheight)
+        end
+        UpdateListSize()
+    end
+    
+    return {
+        SetItemCount = SetItemCount,
+        SetItemHeight = SetItemHeight,
+        UpdateListSize = UpdateListSize,
+        UpdateItemList = UpdateItemList,
+    }
+end
+
+-- local function CreateBindButton(keycomb)
+--     local b = CreateFrame("Button", "GOCommand_KEYBIND_"..keycomb)
+--     b:SetScript("OnClick", function(...) b.fn(...) end)
+--     return b
+-- end
+-- local function bindings(h, ...)
+--     return h, {...}
+-- end
+-- local frame = CreateFrame("Frame")
+-- frame:SetScript("OnEvent", function(self, event, addonName)
+--     if addonName ~= "GOCommand" then
+--         return
+--     end
+--     GOCommandSV.bindings = GOCommandSV.bindings or {}
+--     for k,v in ipairs(GOCommandSV.bindings) do
+--         local fn = assert(loadstring(v.code))
+--         local btn = CreateBindButton(v.keycomb)
+--         btn.fn = fn
+--         SetOverrideBinding(frame, false, v.keycomb, "CLICK "..btn:GetName());
+--     end
+    
+--     local f = MakeFrame("binder")
+--     f:SetToplevel(true)
+--     f:SetMinResize(10*4, 10*3)
+--     f:SetSize(100, 100)
+--     f:RegisterForDrag("LeftButton")
+--     f:SetPoint("CENTER")
+--     f:EnableMouse(true)
+--     f:SetMovable(true)
+--     f:SetResizable(true)
+--     f:SetClampedToScreen(true)
+--     MakeTexture(f):SetAllPoints(f)
+--     SetScript(f, "OnDragStart", f.StartMoving)
+--     SetScript(f, "OnHide", f.StopMovingOrSizing)
+--     SetScript(f, "OnDragStop", f.StopMovingOrSizing)
+--     f:RegisterForDrag("LeftButton")
+
+--     local key = MakeButton(nil, f)
+--     key:SetPoint("TOPLEFT", f, "BOTTOMLEFT")
+--     key:SetSize(150, 10)
+--     MakeTexture(key):SetAllPoints(key)
+--     SetScript(key, "OnClick", function(self)
+--         self:EnableKeyboard(true)
+--     end)
+--     SetScript(key, "OnKeyDown", function(self, key)
+--         if key == "LSHIFT" then return end
+--         if key == "LCTRL" then return end
+--         if key == "LALT" then return end
+--         if key == "RSHIFT" then return end
+--         if key == "RCTRL" then return end
+--         if key == "RALT" then return end
+--         local prefix = ""
+--         prefix = prefix..(IsAltKeyDown() and "ALT-" or "")
+--         prefix = prefix..(IsControlKeyDown() and "CTRL-" or "")
+--         prefix = prefix..(IsShiftKeyDown() and "SHIFT-" or "")
+--         local keycomb = (prefix..key):upper()
+--         if self.boundkeycomb then
+--             SetOverrideBinding(frame, false, self.boundkeycomb, nil)
+--         end
+--         self.boundkeycomb = keycomb
+--         self:SetText(keycomb)
+--         local btn = _G["GOCommand_KEYBIND_"..keycomb] or CreateBindButton(keycomb)
+--         SetOverrideBindingClick(frame, false, keycomb, btn:GetName())
+--         btn.fn = function() print(keycomb) end
+--         self:EnableKeyboard(false)
+--     end)
+    
+--     sf = CreateFrame("ScrollFrame")
+--     sf:SetPoint("LEFT", f, "RIGHT")
+--     sf:SetSize(100, 100)
+    
+--     local codebox = MakeInput(sf)
+--     codebox:SetAllPoints(sf)
+--     codebox:SetMultiLine(true)
+--     codebox:SetScript("OnSizeChanged", nil)
+--     codebox:SetScript("OnEnterPressed", nil)
+--     codebox:SetFont("Fonts\\ARIALN.ttf", 10)
+    
+--     codebox:SetScript("OnCursorChanged", function(this, arg1, arg2, arg3, arg4)
+--         local vs = this:GetParent():GetVerticalScroll();
+--         local h  = this:GetParent():GetHeight();
+
+--         if vs+arg2 > 0 or 0 > vs+arg2-arg4+h then
+--             this:GetParent():SetVerticalScroll(arg2*-1);
+--         end
+--     end)
+    
+--     sf:SetScrollChild(codebox)
+    
+--     local bindings = MakeLayer(f)
+--     bindings:SetAllPoints(f)
+    
+--     local s = MakeSlider(nil, f)
+--     s:SetWidth(10)
+--     s:SetOrientation("VERTICAL")
+--     s:SetPoint("TOPRIGHT", bindings, "TOPLEFT")
+--     s:SetPoint("BOTTOMRIGHT", bindings, "BOTTOMLEFT")
+    
+--     local function item_create(v, idx)
+--         local fs = MakeFontString(v)
+--         fs:SetAllPoints(v)
+--         fs:SetText("UNKNOWN")
+--     end
+    
+--     local function item_show(v, idx)
+--     end
+    
+--     local function item_hide(v, idx)
+--     end
+    
+--     local funks = MakeScroll(s, bindings, item_create, item_show, item_hide)
+--     funks.SetItemHeight(10)
+--     funks.SetItemCount(#GOCommandSV.bindings)
+--     funks.SetItemCount(1)
+-- end)
+-- frame:RegisterEvent("ADDON_LOADED")
