@@ -8,8 +8,10 @@ It does not require any server modification, so you can use it basically on any 
 - Log in and enable all of the addons installed before entering world.
 
 # Background
-I never finished the addon, so the UI is shit and so. It does have new features compared to the old GOMove.
+**I never finished the addon**, so the UI is shit and so. But it does have new features compared to the old GOMove and its pure addon.
+
 I had this code just on my disk for the last 2-3 years collecting dust, so since it was asked multiple times I decided to just fix it up to a working condition and cut the non working parts.
+
 The addon is made for 3.3.5 TrinityCore.
 It requires the server to support the addon protocol: https://github.com/TrinityCore/TrinityCore/pull/20074 so it will not work on other cores than TC unless they port that.
 
