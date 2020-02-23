@@ -34,5 +34,7 @@ It requires the server to support the addon protocol: https://github.com/Trinity
 
 # Media
 ![Image of UI](https://i.imgur.com/VenjE0x.png "UI in full glory")
+
 [![Video of moving multiple objects](http://img.youtube.com/vi/ty8qzmuG1cQ/0.jpg)](http://www.youtube.com/watch?v=ty8qzmuG1cQ)
+
 [![Video of rotating an object in different axes](http://img.youtube.com/vi/phd5xtFyCao/0.jpg)](http://www.youtube.com/watch?v=phd5xtFyCao)
