@@ -2,7 +2,7 @@
 ## Title: GOCommand
 ## Author: Rochet2
 
-## OptionalDeps: LibStub, LibTrinityCore-1.0
+## Dependencies: LibStub, LibTrinityCore-1.0
 ## SavedVariables: GOCommandSV
 # change SavedVariables to SavedVariablesPerCharacter if you want favourite list per char
 
